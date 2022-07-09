@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged
+  namespace: default
+spec:
+  containers:
+  - command:
+    - nsenter
+    - --mount=/proc/1/ns/mnt
+    image: alpine:latest
+    imagePullPolicy: Always
+    name: privileged
+    resources: {}
+    securityContext:
+      privileged: true
+    stdin: true
+    stdinOnce: true
+    tty: true
+  hostPID: true
+
+
