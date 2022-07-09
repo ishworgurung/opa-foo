@@ -1,0 +1,40 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenycontainerimages
+  annotations:
+    description: >-
+      Only allows container images from hooli.com
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyContainerImages
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenycontainerimages
+        
+        identical(self, review) {
+          self.metadata.namespace == review.object.metadata.namespace
+          self.metadata.name == review.object.metadata.name
+        }
+
+        violation[{"msg": msg}] {
+          # Ensure, we are reviewing a pod.
+          input.review.kind.kind == "Pod"
+          container := input.review.object.spec.containers[_]
+          not startswith(container.image, "hooli.com/")
+          msg := sprintf("container image refers to illegal registry <%s> (must be hooli.com)", [container.image])
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyContainerImages
+metadata:
+  name: deny-container-images
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]

@@ -1,0 +1,56 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueingresshostpath
+  annotations:
+    description: >-
+      Requires all Ingress rule hosts' path to be unique.
+      Does not handle hostname wildcards:
+      https://kubernetes.io/docs/concepts/services-networking/ingress/
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sUniqueIngressHostPath
+    #   validation:
+    #     # Schema for the `parameters` field
+    #     openAPIV3Schema:
+    #       type: object
+    #       properties:
+    #         labels:
+    #           type: array
+    #           items:
+    #             type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8suniqueingresshostpath
+
+        identical(self, review) {
+          self.metadata.namespace == review.object.metadata.namespace
+          self.metadata.name == review.object.metadata.name
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Ingress"
+          re_match("^(extensions|networking.k8s.io)$", input.review.kind.group)
+          host := input.review.object.spec.rules[_].host
+          path := input.review.object.spec.rules[_].http.paths[_].path
+          other := data.inventory.namespace[_][otherapiversion]["Ingress"][name]
+          re_match("^(extensions|networking.k8s.io)/.+$", otherapiversion)
+          #other.spec.rules[_].host == host
+          other.spec.rules[_].http.paths[_].path == path
+          not identical(other, input.review)
+          msg := sprintf("ingress host path <%s> conflicts with an existing ingress <%v>", [path, host])
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sUniqueIngressHostPath
+metadata:
+  name: unique-ingress-host-path
+spec:
+  match:
+    kinds:
+      - apiGroups: ["extensions", "networking.k8s.io"]
+        kinds: ["Ingress"]
